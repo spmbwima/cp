@@ -504,17 +504,24 @@ function siswaKelas(){
   return S.siswa.filter(s=>s.tahun_ajaran===S.ta && s.kelas===k && s.aktif!==false);
 }
 function renderSiswaList(){
-  const box = $("siswaList");
-  if(!$("inKelas").value){ box.innerHTML=`<div class="item muted">Pilih kelas dulu untuk menampilkan daftar siswa.</div>`; return; }
+  const box = $("siswaList"), kelas = $("inKelas").value;
   const q = $("inCariSiswa").value.toLowerCase().trim();
-  const rows = siswaKelas().filter(s=>!q || s.nama.toLowerCase().includes(q) || (s.nis||"").includes(q));
+  const cocok = s=>!q || s.nama.toLowerCase().includes(q) || (s.nis||"").includes(q);
+  let rows, semuaKelas = !kelas;
+  if(semuaKelas){ // belum pilih kelas: cari nama/NIS di semua kelas
+    if(!q){ box.innerHTML=`<div class="item muted">Pilih kelas, atau ketik nama/NIS siswa untuk mencari di semua kelas.</div>`; return; }
+    rows = S.siswa.filter(s=>s.tahun_ajaran===S.ta && s.aktif!==false && cocok(s));
+  } else rows = siswaKelas().filter(cocok);
   if(!rows.length){ box.innerHTML=`<div class="item muted">Tidak ada siswa yang cocok.</div>`; return; }
+  const MAX = 60, lebih = semuaKelas && rows.length>MAX;
+  if(semuaKelas){ rows = rows.slice().sort((a,b)=>a.nama.localeCompare(b.nama,"id")||kelasSort(a.kelas,b.kelas)); if(lebih) rows = rows.slice(0,MAX); }
   box.innerHTML = rows.map(s=>`<label class="item ${selSiswa.has(s.id)?"sel":""}" style="font-weight:400;margin:0">
-    <input type="checkbox" ${selSiswa.has(s.id)?"checked":""} onchange="toggleSiswa(${s.id})"> ${esc(s.nama)}</label>`).join("");
+    <input type="checkbox" ${selSiswa.has(s.id)?"checked":""} onchange="toggleSiswa(${s.id})"> ${esc(s.nama)}${semuaKelas?` <span class="muted">· ${esc(s.kelas)}</span>`:""}</label>`).join("")
+    + (lebih?`<div class="item muted">Menampilkan ${MAX} pertama. Ketik lebih lengkap untuk mempersempit.</div>`:"");
 }
 function toggleSiswa(id){ selSiswa.has(id)?selSiswa.delete(id):selSiswa.add(id); renderSiswaList(); renderChips(); }
 function renderChips(){
-  $("siswaChips").innerHTML = [...selSiswa].map(id=>{const s=S.siswa.find(x=>x.id===id);return s?`<span class="chip">${esc(s.nama)}<button title="Hapus" onclick="toggleSiswa(${id})">×</button></span>`:""}).join("");
+  $("siswaChips").innerHTML = [...selSiswa].map(id=>{const s=S.siswa.find(x=>x.id===id);return s?`<span class="chip">${esc(s.nama)} <small>(${esc(s.kelas)})</small><button title="Hapus" onclick="toggleSiswa(${id})">×</button></span>`:""}).join("");
   updateRingkas();
 }
 function renderJenisList(){
@@ -541,7 +548,6 @@ function uid(){ return (window.crypto&&crypto.randomUUID)?crypto.randomUUID():"i
 async function simpanCatatan(){
   const tgl = $("inTanggal").value, j = S.jenis.find(x=>x.id===selJenis);
   if(!tgl) return toast("Isi tanggal pelanggaran.",true);
-  if(!$("inKelas").value) return toast("Pilih kelas.",true);
   if(!selSiswa.size) return toast("Pilih minimal satu siswa.",true);
   if(!j) return toast("Pilih nama pelanggaran.",true);
   const rows = [...selSiswa].map(id=>{const s=S.siswa.find(x=>x.id===id);
