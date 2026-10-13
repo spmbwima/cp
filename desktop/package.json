@@ -1,0 +1,24 @@
+{
+  "name": "catatan-pelanggaran",
+  "version": "1.0.0",
+  "description": "Catatan Pelanggaran Siswa - SMK Widya Mandala Tambak",
+  "author": "SMK Widya Mandala Tambak",
+  "main": "main.js",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "id.sch.smkwidyamandalatambak.pelanggaran",
+    "productName": "Catatan Pelanggaran",
+    "files": ["main.js", "preload.js", "index.html", "icon.ico"],
+    "directories": { "buildResources": "build" },
+    "win": { "target": ["nsis", "portable"] },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Catatan-Pelanggaran-Setup-${version}.${ext}"
+    },
+    "portable": { "artifactName": "Catatan-Pelanggaran-Portable-${version}.${ext}" }
+  }
+}
