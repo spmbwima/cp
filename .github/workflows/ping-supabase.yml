@@ -13,5 +13,5 @@ jobs:
         run: |
           curl -sS --fail-with-body --retry 3 --retry-delay 10 \
             "https://nrwexyezcbmsokelgkmp.supabase.co/rest/v1/pv_catatan?select=id&limit=1" \
-            -H "apikey: sb_publishable_eKH7VdAJy17PjYuTL-3X9w_pKViejAd" \
-            -H "Authorization: Bearer sb_publishable_eKH7VdAJy17PjYuTL-3X9w_pKViejAd"
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
