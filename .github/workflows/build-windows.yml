@@ -1,0 +1,135 @@
+name: Build Aplikasi Windows
+
+# Membungkus https://spmbwima.github.io/cp/ menjadi aplikasi Windows (.exe)
+# memakai Electron. Tidak perlu file proyek lain di repo.
+on:
+  workflow_dispatch:        # jalankan manual dari tab Actions
+  push:
+    tags: ['v*']            # atau buat tag, mis. v1.0.0, untuk sekaligus membuat Release
+
+permissions:
+  contents: write           # diperlukan untuk membuat Release
+
+env:
+  APP_URL: https://spmbwima.github.io/cp/
+  APP_NAME: Catatan Pelanggaran
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Buat proyek Electron
+        shell: bash
+        run: |
+          mkdir -p app/build
+          cd app
+
+          cat > package.json <<'EOF_PKG'
+          {
+            "name": "catatan-pelanggaran",
+            "version": "1.0.0",
+            "description": "Catatan Pelanggaran Siswa - SMK Widya Mandala Tambak",
+            "author": "SMK Widya Mandala Tambak",
+            "main": "main.js",
+            "devDependencies": {
+              "electron": "^33.0.0",
+              "electron-builder": "^25.0.0"
+            },
+            "build": {
+              "appId": "id.sch.smkwidyamandalatambak.pelanggaran",
+              "productName": "Catatan Pelanggaran",
+              "files": ["main.js", "config.json", "offline.html"],
+              "directories": { "buildResources": "build" },
+              "win": { "target": ["nsis", "portable"] },
+              "nsis": {
+                "oneClick": false,
+                "allowToChangeInstallationDirectory": true,
+                "artifactName": "Catatan-Pelanggaran-Setup-${version}.${ext}"
+              },
+              "portable": { "artifactName": "Catatan-Pelanggaran-Portable-${version}.${ext}" }
+            }
+          }
+          EOF_PKG
+
+          cat > main.js <<'EOF_MAIN'
+          const { app, BrowserWindow, Menu, shell } = require('electron');
+          const path = require('path');
+          const cfg = require('./config.json');
+
+          if (!app.requestSingleInstanceLock()) app.quit();
+
+          let win;
+          function createWindow() {
+            Menu.setApplicationMenu(null);
+            win = new BrowserWindow({
+              width: 1280, height: 800, minWidth: 380, minHeight: 600,
+              title: cfg.name, autoHideMenuBar: true,
+              webPreferences: { contextIsolation: true, nodeIntegration: false }
+            });
+            win.loadURL(cfg.url);
+            // Jika tidak ada koneksi, tampilkan halaman cadangan yang mencoba lagi otomatis
+            win.webContents.on('did-fail-load', (e, code, desc, url, isMain) => {
+              if (isMain && code !== -3) win.loadFile(path.join(__dirname, 'offline.html'), { query: { u: cfg.url } });
+            });
+            // Tautan ke situs lain dibuka di browser, bukan di jendela aplikasi
+            win.webContents.setWindowOpenHandler(({ url }) => {
+              try { if (new URL(url).origin === new URL(cfg.url).origin) return { action: 'allow' }; } catch (e) {}
+              shell.openExternal(url);
+              return { action: 'deny' };
+            });
+          }
+          app.whenReady().then(createWindow);
+          app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
+          app.on('window-all-closed', () => app.quit());
+          EOF_MAIN
+
+          cat > offline.html <<'EOF_OFF'
+          <!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Tidak ada koneksi</title>
+          <style>body{font-family:Segoe UI,sans-serif;background:#1b2b21;color:#fff;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;text-align:center}
+          button{background:#8dc63f;border:0;border-radius:6px;padding:10px 20px;font-size:15px;font-weight:600;cursor:pointer;margin-top:12px}</style></head>
+          <body><div><h2>Tidak ada koneksi internet</h2><p>Aplikasi akan mencoba tersambung lagi otomatis.</p><button onclick="go()">Coba lagi sekarang</button></div>
+          <script>const u=new URLSearchParams(location.search).get('u');function go(){location.href=u}setInterval(()=>{if(navigator.onLine)go()},8000);</script></body></html>
+          EOF_OFF
+
+          node -e "require('fs').writeFileSync('config.json', JSON.stringify({url: process.env.APP_URL, name: process.env.APP_NAME}))"
+
+      - name: Pakai ikon sendiri (jika ada icon.ico di root repo)
+        shell: bash
+        run: |
+          if [ -f icon.ico ]; then cp icon.ico app/build/icon.ico; echo "Ikon dipakai"; else echo "icon.ico tidak ada, memakai ikon bawaan"; fi
+
+      - name: Atur versi dari tag (jika dijalankan dari tag)
+        shell: bash
+        working-directory: app
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+          fi
+
+      - name: Pasang dependensi
+        working-directory: app
+        run: npm install
+
+      - name: Build installer Windows
+        working-directory: app
+        run: npx electron-builder --win --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Unggah hasil build
+        uses: actions/upload-artifact@v4
+        with:
+          name: aplikasi-windows
+          path: app/dist/*.exe
+
+      - name: Buat GitHub Release (hanya untuk tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/dist/*.exe
